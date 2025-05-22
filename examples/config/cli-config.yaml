@@ -1,0 +1,15 @@
+# Конфигурация для CLI Aegis
+database_type: sqlite
+sqlite_path: ~/.aegis/aegis.db
+# database_type: postgresql
+# database_url: postgres://username:password@localhost:5432/aegisdb
+default_agent_port: 8080
+log_level: info
+log_file: ~/.aegis/aegis.log
+
+# Конфигурация уведомлений
+notification:
+  enabled: true
+  telegram_bot: false
+  telegram_token: ""
+  telegram_chat_id: "" 

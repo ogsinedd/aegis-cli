@@ -1,0 +1,23 @@
+# Конфигурация для Aegis Agent
+port: 8080
+docker_socket_path: /var/run/docker.sock
+scan_concurrency: 2
+log_level: info
+log_file: /var/log/aegis-agent/agent.log
+results_dir: /var/lib/aegis-agent/results
+
+# Примеры пользовательских хуков
+hooks:
+  - id: "hook-1"
+    name: "Логирование завершения сканирования"
+    event: "on_scan_complete"
+    script_path: "/etc/aegis-agent/hooks/on_scan_complete.sh"
+    timeout_seconds: 30
+    enabled: true
+
+  - id: "hook-2"
+    name: "Уведомление об ошибке"
+    event: "on_error"
+    script_path: "/etc/aegis-agent/hooks/on_error.sh"
+    timeout_seconds: 30
+    enabled: true 

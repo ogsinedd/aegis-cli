@@ -1,0 +1,16 @@
+[Unit]
+Description=Aegis Agent Service
+After=network.target docker.service
+
+[Service]
+ExecStart=/usr/local/bin/aegis-agent
+Restart=on-failure
+User=root
+Group=root
+WorkingDirectory=/var/lib/aegis-agent
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=aegis-agent
+
+[Install]
+WantedBy=multi-user.target 

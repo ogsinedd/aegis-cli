@@ -1,0 +1,148 @@
+---
+# Ansible playbook для установки aegis-agent
+- name: Install Aegis Agent
+  hosts: all
+  become: yes
+  vars:
+    agent_version: "0.1.0"
+    agent_config_dir: "/etc/aegis-agent"
+    agent_results_dir: "/var/lib/aegis-agent/results"
+    agent_log_dir: "/var/log/aegis-agent"
+    agent_port: 8080
+    agent_scan_concurrency: 2
+    trivy_version: "0.45.0"
+    
+  tasks:
+    - name: Ensure system is up to date
+      apt:
+        update_cache: yes
+        upgrade: safe
+      when: ansible_os_family == "Debian"
+      
+    - name: Install required packages
+      apt:
+        name:
+          - curl
+          - wget
+          - ca-certificates
+          - gnupg
+        state: present
+      when: ansible_os_family == "Debian"
+      
+    - name: Check if Docker is installed
+      command: docker --version
+      register: docker_check
+      ignore_errors: yes
+      changed_when: false
+      
+    - name: Install Docker if not present
+      block:
+        - name: Add Docker GPG key
+          apt_key:
+            url: https://download.docker.com/linux/ubuntu/gpg
+            state: present
+          when: ansible_distribution == "Ubuntu"
+          
+        - name: Add Docker repository
+          apt_repository:
+            repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable
+            state: present
+          when: ansible_distribution == "Ubuntu"
+          
+        - name: Install Docker packages
+          apt:
+            name:
+              - docker-ce
+              - docker-ce-cli
+              - containerd.io
+            state: present
+          when: ansible_os_family == "Debian"
+      when: docker_check.rc != 0 and ansible_os_family == "Debian"
+      
+    - name: Install Trivy
+      block:
+        - name: Download Trivy
+          get_url:
+            url: "https://github.com/aquasecurity/trivy/releases/download/v{{ trivy_version }}/trivy_{{ trivy_version }}_Linux-64bit.tar.gz"
+            dest: "/tmp/trivy.tar.gz"
+            mode: '0644'
+            
+        - name: Create Trivy directory
+          file:
+            path: "/tmp/trivy"
+            state: directory
+            mode: '0755'
+            
+        - name: Extract Trivy
+          unarchive:
+            src: "/tmp/trivy.tar.gz"
+            dest: "/tmp/trivy"
+            remote_src: yes
+            
+        - name: Install Trivy binary
+          copy:
+            src: "/tmp/trivy/trivy"
+            dest: "/usr/local/bin/trivy"
+            mode: '0755'
+            remote_src: yes
+            
+        - name: Clean up Trivy files
+          file:
+            path: "{{ item }}"
+            state: absent
+          loop:
+            - "/tmp/trivy.tar.gz"
+            - "/tmp/trivy"
+      when: trivy_version is defined
+      
+    - name: Create agent directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - "{{ agent_config_dir }}"
+        - "{{ agent_results_dir }}"
+        - "{{ agent_log_dir }}"
+        
+    - name: Check if agent is already installed
+      stat:
+        path: /usr/local/bin/aegis-agent
+      register: agent_binary
+      
+    - name: Copy aegis-agent binary from local machine
+      copy:
+        src: "{{ playbook_dir }}/../../bin/aegis-agent"
+        dest: /usr/local/bin/aegis-agent
+        mode: '0755'
+      when: not agent_binary.stat.exists
+      
+    - name: Create agent configuration
+      template:
+        src: templates/agent-config.yml.j2
+        dest: "{{ agent_config_dir }}/config.yaml"
+        mode: '0644'
+      vars:
+        agent_port: "{{ agent_port }}"
+        agent_scan_concurrency: "{{ agent_scan_concurrency }}"
+        agent_results_dir: "{{ agent_results_dir }}"
+        agent_log_dir: "{{ agent_log_dir }}"
+        
+    - name: Create systemd service file
+      template:
+        src: templates/aegis-agent.service.j2
+        dest: /etc/systemd/system/aegis-agent.service
+        mode: '0644'
+      notify:
+        - Reload systemd
+        
+    - name: Start and enable aegis-agent service
+      systemd:
+        name: aegis-agent
+        enabled: yes
+        state: started
+      
+  handlers:
+    - name: Reload systemd
+      systemd:
+        daemon_reload: yes 
